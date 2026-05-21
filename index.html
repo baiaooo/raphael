@@ -1077,7 +1077,7 @@
       </div>
       <div>
         <span>Experiência</span>
-        <strong>Junior</strong>
+        <strong>Júnior</strong>
       </div>
     </div>
   </div>
@@ -1464,7 +1464,8 @@
   const AMOUNT = 10;
   const COUNT = AMOUNT * AMOUNT * AMOUNT;
 
-  let camera, scene, renderer, mesh;
+  let camera, scene, renderer;
+  const clusters = []; // [{ mesh, trail }]
   let isRunning = false;
   let frameId = null;
 
@@ -1475,8 +1476,9 @@
   const tmpColor = new THREE.Color();
   const baseColor = new THREE.Color(0x111111);
   const hoverColor = new THREE.Color(0xc8ff00);
-  const trail = new Map();
-  const TRAIL_LIFETIME = 70;
+  const TRAIL_LIFETIME = 360;
+  const CLUSTER_SCALE = 1.3;
+  const CLUSTER_X = 6;
 
   function getSize() {
     return { w: hireBg.clientWidth, h: hireBg.clientHeight };
@@ -1505,24 +1507,33 @@
       specular: 0x222222
     });
 
-    mesh = new THREE.InstancedMesh(geometry, material, COUNT);
-    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    function buildCluster(xPos) {
+      const m = new THREE.InstancedMesh(geometry, material, COUNT);
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 
-    const matrix = new THREE.Matrix4();
-    let i = 0;
-    const offset = (AMOUNT - 1) / 2;
-    for (let x = 0; x < AMOUNT; x++) {
-      for (let y = 0; y < AMOUNT; y++) {
-        for (let z = 0; z < AMOUNT; z++) {
-          matrix.setPosition(offset - x, offset - y, offset - z);
-          mesh.setMatrixAt(i, matrix);
-          mesh.setColorAt(i, baseColor);
-          i++;
+      const matrix = new THREE.Matrix4();
+      let i = 0;
+      const offset = (AMOUNT - 1) / 2;
+      for (let x = 0; x < AMOUNT; x++) {
+        for (let y = 0; y < AMOUNT; y++) {
+          for (let z = 0; z < AMOUNT; z++) {
+            matrix.setPosition(offset - x, offset - y, offset - z);
+            m.setMatrixAt(i, matrix);
+            m.setColorAt(i, baseColor);
+            i++;
+          }
         }
       }
+
+      m.position.set(xPos, 0, 0);
+      m.scale.setScalar(CLUSTER_SCALE);
+      scene.add(m);
+      return { mesh: m, trail: new Map() };
     }
 
-    scene.add(mesh);
+    // dois clusters idênticos: direita e esquerda
+    clusters.push(buildCluster(CLUSTER_X));
+    clusters.push(buildCluster(-CLUSTER_X));
 
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -1553,28 +1564,34 @@
     if (!isRunning) return;
     frameId = requestAnimationFrame(animate);
 
-    // rotação sutil pro background ficar vivo
-    mesh.rotation.y = (timestamp || 0) * 0.00008;
-    mesh.rotation.x = Math.sin((timestamp || 0) * 0.00005) * 0.1;
+    const t = timestamp || 0;
+    // rotação sutil pro background ficar vivo (ambos clusters idênticos)
+    for (const { mesh } of clusters) {
+      mesh.rotation.y = t * 0.00008;
+      mesh.rotation.x = Math.sin(t * 0.00005) * 0.1;
+    }
 
     if (pointerInside) {
       raycaster.setFromCamera(pointer, camera);
-      const intersection = raycaster.intersectObject(mesh);
+      const meshes = clusters.map(c => c.mesh);
+      const intersection = raycaster.intersectObjects(meshes, false);
       if (intersection.length > 0) {
-        const id = intersection[0].instanceId;
-        trail.set(id, TRAIL_LIFETIME);
+        const hit = intersection[0];
+        const cluster = clusters.find(c => c.mesh === hit.object);
+        if (cluster) cluster.trail.set(hit.instanceId, TRAIL_LIFETIME);
       }
     }
 
-    // atualiza trail (fade-out)
-    if (trail.size > 0) {
+    // atualiza trail (fade-out) por cluster
+    for (const { mesh, trail } of clusters) {
+      if (trail.size === 0) continue;
       trail.forEach((ticks, id) => {
         if (ticks <= 0) {
           mesh.setColorAt(id, baseColor);
           trail.delete(id);
         } else {
-          const t = ticks / TRAIL_LIFETIME;
-          tmpColor.lerpColors(baseColor, hoverColor, t);
+          const k = ticks / TRAIL_LIFETIME;
+          tmpColor.lerpColors(baseColor, hoverColor, k);
           mesh.setColorAt(id, tmpColor);
           trail.set(id, ticks - 1);
         }
