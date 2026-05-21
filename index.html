@@ -737,7 +737,7 @@
     gap: 14px;
   }
   .project-title .client-logo {
-    height: 56px;
+    height: 45px;
     width: auto;
     filter: brightness(0) invert(1);
     opacity: 0.95;
@@ -746,6 +746,11 @@
     color: var(--text-faint);
     font-weight: 300;
     margin: 0 2px;
+  }
+  .project-title .accent {
+    color: var(--accent);
+    font-style: italic;
+    font-weight: 500;
   }
   .project-meta {
     font-family: var(--mono);
@@ -1259,7 +1264,7 @@
         <div class="project-title">
           Portfolio
           <span class="client-sep">·</span>
-          raphael.dev
+          raphael<span class="accent">.dev</span>
         </div>
         <div class="project-meta">2026 · este site</div>
       </div>
